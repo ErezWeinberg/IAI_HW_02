@@ -4,11 +4,26 @@ import random
 import time
 import math
 
+EXPECTIMAX_ACTION_WEIGHTS = {
+    "move north": 4,
+    "charge": 4,
+}
+
+TIE_BREAKING_ORDER = [
+    "drop off",
+    "pick up",
+    "charge",
+    "move north",
+    "move east",
+    "move south",
+    "move west",
+    "park",
+]
+
 
 # -----------------------------------------------------------------
-# Heuristic Function
+# Section A: Heuristic Function
 # -----------------------------------------------------------------
-
 def smart_heuristic(env: WarehouseEnv, robot_id: int):
     robot = env.get_robot(robot_id)
     rival = env.get_robot(1 - robot_id)
@@ -31,16 +46,14 @@ def smart_heuristic(env: WarehouseEnv, robot_id: int):
             distances = [manhattan_distance(robot.position, p.position) for p in packages_on_board]
             dist_to_target = min(distances)
 
-    # Calculate exact heuristic value according to the dry report formula: w1=2, w2=2, w3=1
+    # Calculate exact heuristic value (w1=2, w2=2, w3=1)
     h = (2 * credit_diff) + (2 * battery) - (1 * dist_to_target)
-
     return h
 
 
 # -----------------------------------------------------------------
-# Global Decision Functions (As required by the assignment format)
+# Section B: Minimax
 # -----------------------------------------------------------------
-
 def minimax_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_fn=None, time_limit=None):
     if heuristic_fn is None:
         heuristic_fn = smart_heuristic
@@ -56,9 +69,12 @@ def minimax_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_fn=
         if not operators:
             return heuristic_fn(current_env, robot_id), None
 
+        # Sort operators by tie-breaking order
+        operators.sort(key=lambda op: TIE_BREAKING_ORDER.index(op) if op in TIE_BREAKING_ORDER else 999)
+
+        best_op = None
         if current_robot == robot_id:
             curr_max = -math.inf
-            best_op = None
             for op in operators:
                 child = current_env.clone()
                 child.apply_operator(current_robot, op)
@@ -69,7 +85,6 @@ def minimax_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_fn=
             return curr_max, best_op
         else:
             curr_min = math.inf
-            best_op = None
             for op in operators:
                 child = current_env.clone()
                 child.apply_operator(current_robot, op)
@@ -86,6 +101,9 @@ def minimax_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_fn=
         return None
 
 
+# -----------------------------------------------------------------
+# Section C: Alpha-Beta
+# -----------------------------------------------------------------
 def alphabeta_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_fn=None, time_limit=None):
     if heuristic_fn is None:
         heuristic_fn = smart_heuristic
@@ -101,9 +119,11 @@ def alphabeta_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_f
         if not operators:
             return heuristic_fn(current_env, robot_id), None
 
+        operators.sort(key=lambda op: TIE_BREAKING_ORDER.index(op) if op in TIE_BREAKING_ORDER else 999)
+
+        best_op = None
         if current_robot == robot_id:
             curr_max = -math.inf
-            best_op = None
             for op in operators:
                 child = current_env.clone()
                 child.apply_operator(current_robot, op)
@@ -117,7 +137,6 @@ def alphabeta_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_f
             return curr_max, best_op
         else:
             curr_min = math.inf
-            best_op = None
             for op in operators:
                 child = current_env.clone()
                 child.apply_operator(current_robot, op)
@@ -125,7 +144,7 @@ def alphabeta_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_f
                 if v < curr_min:
                     curr_min = v
                     best_op = op
-                beta = min(currMin, beta)
+                beta = min(curr_min, beta)
                 if curr_min <= alpha:
                     return curr_min, best_op
             return curr_min, best_op
@@ -137,6 +156,9 @@ def alphabeta_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_f
         return None
 
 
+# -----------------------------------------------------------------
+# Section D: Expectimax
+# -----------------------------------------------------------------
 def expectimax_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_fn=None, time_limit=None):
     if heuristic_fn is None:
         heuristic_fn = smart_heuristic
@@ -151,6 +173,8 @@ def expectimax_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_
         operators = current_env.get_legal_operators(current_robot)
         if not operators:
             return heuristic_fn(current_env, robot_id), None
+
+        operators.sort(key=lambda op: TIE_BREAKING_ORDER.index(op) if op in TIE_BREAKING_ORDER else 999)
 
         if current_robot == robot_id:
             curr_max = -math.inf
@@ -167,7 +191,7 @@ def expectimax_decision(env: WarehouseEnv, robot_id: int, depth: int, heuristic_
             total_weight = 0
             weights = []
             for op in operators:
-                w = 4 if op in ['move north', 'charge'] else 1
+                w = EXPECTIMAX_ACTION_WEIGHTS.get(op, 1)
                 weights.append(w)
                 total_weight += w
 
@@ -203,11 +227,17 @@ class AgentMinimax(Agent):
         moves = env.get_legal_operators(agent_id)
         if not moves:
             return 'park'
-        moves_return = random.choice(moves)
+
+        # Sort for default choice just in case
+        moves.sort(key=lambda op: TIE_BREAKING_ORDER.index(op) if op in TIE_BREAKING_ORDER else 999)
+        moves_return = moves[0]
+
         depth = 1
         while time.time() < limit and depth <= 4:
+            # Stop deepening if we exceed realistic battery depths
             if depth > 2 * env.get_robot(agent_id).battery:
                 return moves_return
+
             op = minimax_decision(env, agent_id, depth, time_limit=limit)
             if op is not None:
                 moves_return = op
@@ -223,11 +253,15 @@ class AgentAlphaBeta(Agent):
         moves = env.get_legal_operators(agent_id)
         if not moves:
             return 'park'
-        moves_return = random.choice(moves)
+
+        moves.sort(key=lambda op: TIE_BREAKING_ORDER.index(op) if op in TIE_BREAKING_ORDER else 999)
+        moves_return = moves[0]
+
         depth = 1
         while time.time() < limit and depth <= 4:
             if depth > 2 * env.get_robot(agent_id).battery:
                 return moves_return
+
             op = alphabeta_decision(env, agent_id, depth, time_limit=limit)
             if op is not None:
                 moves_return = op
@@ -243,11 +277,15 @@ class AgentExpectimax(Agent):
         moves = env.get_legal_operators(agent_id)
         if not moves:
             return 'park'
-        moves_return = random.choice(moves)
+
+        moves.sort(key=lambda op: TIE_BREAKING_ORDER.index(op) if op in TIE_BREAKING_ORDER else 999)
+        moves_return = moves[0]
+
         depth = 1
         while time.time() < limit and depth <= 4:
             if depth > 2 * env.get_robot(agent_id).battery:
                 return moves_return
+
             op = expectimax_decision(env, agent_id, depth, time_limit=limit)
             if op is not None:
                 moves_return = op
