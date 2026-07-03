@@ -8,160 +8,29 @@ import math
 def smart_heuristic(env: WarehouseEnv, robot_id: int):
     robot = env.get_robot(robot_id)
     rival = env.get_robot(1 - robot_id)
-    # If the robot is not carrying a package, find the closest one and see if reachable:
-    if not env.robot_is_occupied(robot_id):
-        dist0 = manhattan_distance(robot.position, env.packages[0].position)
-        dest0 = manhattan_distance(env.packages[0].position,
-                                   env.packages[0].destination)
-        reward0 = dest0 * 2
-        if rival.package:
-            dist = dist0
-            y = reward0
-            x = 1 / (dist + 1) + 100 * robot.credit
-            if dist + dest0 - robot.battery < 0:
-                return x
-            z = min(manhattan_distance(robot.position, env.charge_stations[
-                0].position) + manhattan_distance(
-                env.charge_stations[0].position, env.packages[0].position),
-                    manhattan_distance(robot.position, env.charge_stations[
-                        1].position) + manhattan_distance(
-                        env.charge_stations[1].position,
-                        env.packages[0].position))
-            if robot.credit - y <= 0:
-                return 1 / (z + 1) + 100 * robot.credit
-            return 100 * robot.credit
-        else:
-            rivalDist0 = manhattan_distance(rival.position,
-                                            env.packages[0].position)
-            rivalDist1 = manhattan_distance(rival.position,
-                                            env.packages[1].position)
-            dist1 = manhattan_distance(robot.position, env.packages[1].position)
-            dest1 = manhattan_distance(env.packages[1].position,
-                                       env.packages[1].destination)
-            reward1 = dest1 * 2
-            if rivalDist0 > rivalDist1 or dist0 <= rivalDist0:
-                # If can pick up and deliver:
-                if dist0 + dest0 - robot.battery < 0:
-                    return 1 / (dist0 + 1) + 100 * robot.credit
-                # If needs to charge, see if possible and worth it:
-                elif reward0 > robot.credit:
-                    chargeDist = min(
-                        manhattan_distance(env.packages[0].position,
-                                           env.charge_stations[0].position),
-                        manhattan_distance(env.packages[0].position,
-                                           env.charge_stations[1].position))
-                    # If can pick up package and then charge, do minimum of distance:
-                    if dist0 + chargeDist - robot.battery <= 0:
-                        dist = min(manhattan_distance(robot.position,
-                                                      env.charge_stations[
-                                                          0].position) + manhattan_distance(
-                            env.charge_stations[0].position,
-                            env.packages[0].position)
-                                   + manhattan_distance(
-                            env.packages[0].position,
-                            env.packages[0].destination),
-                                   manhattan_distance(robot.position,
-                                                      env.packages[0].position)
-                                   + manhattan_distance(
-                                       env.packages[0].position,
-                                       env.charge_stations[
-                                           0].position) + manhattan_distance(
-                                       env.charge_stations[0].position,
-                                       env.packages[0].destination),
-                                   manhattan_distance(robot.position,
-                                                      env.charge_stations[
-                                                          1].position) + manhattan_distance(
-                                       env.charge_stations[1].position,
-                                       env.packages[0].position)
-                                   + manhattan_distance(
-                                       env.packages[0].position,
-                                       env.packages[0].destination),
-                                   manhattan_distance(robot.position,
-                                                      env.packages[0].position)
-                                   + manhattan_distance(
-                                       env.packages[0].position,
-                                       env.charge_stations[
-                                           1].position) + manhattan_distance(
-                                       env.charge_stations[1].position,
-                                       env.packages[0].destination))
-                        return 1 / (dist + 1) + 100 * robot.credit
-                    # If must charge now:
-                    else:
-                        dist = min(manhattan_distance(robot.position,
-                                                      env.charge_stations[
-                                                          0].position) + manhattan_distance(
-                            env.charge_stations[0].position,
-                            env.packages[0].position)
-                                   + manhattan_distance(
-                            env.packages[0].position,
-                            env.packages[0].destination),
-                                   manhattan_distance(robot.position,
-                                                      env.charge_stations[
-                                                          1].position) + manhattan_distance(
-                                       env.charge_stations[1].position,
-                                       env.packages[0].position)
-                                   + manhattan_distance(
-                                       env.packages[0].position,
-                                       env.packages[0].destination))
-                        return 1 / (dist + 1) + 100 * robot.credit
-            elif rivalDist1 >= rivalDist0 or dist1 <= rivalDist1:
-                # If can pick up and deliver:
-                if dist1 + dest1 - robot.battery <= 0:
-                    return 1 / (dist1 + 1) + 100 * robot.credit
-                # If needs to charge, see if possible and worth it:
-                elif reward1 > robot.credit:
-                    dist = min(manhattan_distance(robot.position,
-                                                  env.charge_stations[
-                                                      0].position) + manhattan_distance(
-                        env.charge_stations[0].position,
-                        env.packages[1].position),
-                               manhattan_distance(robot.position, env.packages[
-                                   1].position) + manhattan_distance(
-                                   env.packages[1].position,
-                                   env.charge_stations[0].position),
-                               manhattan_distance(robot.position,
-                                                  env.charge_stations[
-                                                      1].position) + manhattan_distance(
-                                   env.charge_stations[1].position,
-                                   env.packages[1].position),
-                               manhattan_distance(robot.position, env.packages[
-                                   1].position) + manhattan_distance(
-                                   env.packages[1].position,
-                                   env.charge_stations[1].position))
-                    # If can pick up package and then charge, do minimum of distance:
-                    if dist - robot.battery <= 0:
-                        return 1 / (dist + 1) + 100 * robot.credit
-                    # If must charge now:
-                    else:
-                        chargeDist = min(
-                            manhattan_distance(env.packages[1].position,
-                                               env.charge_stations[0].position),
-                            manhattan_distance(env.packages[1].position,
-                                               env.charge_stations[1].position))
-                        return 1 / (chargeDist + 1) + 100 * robot.credit
 
-    # If the robot is carrying a package, see if the destination is reachable:
+    # Feature 1: Credit difference
+    credit_diff = robot.credit - rival.credit
+
+    # Feature 2: Battery level
+    battery = robot.battery
+
+    # Feature 3: Distance to target (package or destination)
+    dist_to_target = 0
+    if robot.package is not None:
+        # If holding a package, the target is the package's destination
+        dist_to_target = manhattan_distance(robot.position, robot.package.destination)
     else:
-        dist = manhattan_distance(robot.position, robot.package.destination)
-        y = manhattan_distance(robot.package.position,
-                               robot.package.destination) * 2
-        x = y / (dist + 1) + 100 * robot.credit
-        # The destination is reachable:
-        if dist - robot.battery <= 0:
-            return x
-        z = min(manhattan_distance(robot.position, env.charge_stations[
-            0].position) + manhattan_distance(env.charge_stations[0].position,
-                                              robot.package.destination),
-                manhattan_distance(robot.position, env.charge_stations[
-                    1].position) + manhattan_distance(
-                    env.charge_stations[1].position, robot.package.destination))
-        # It is worth it to charge the robot in order to deliver the package:
-        if robot.credit - y <= 0:
-            return 1 / (z + 1) + 100 * robot.credit
-        return 0
+        # If empty-handed, find the closest package currently on the board
+        packages_on_board = [p for p in env.packages if p.on_board]
+        if packages_on_board:
+            distances = [manhattan_distance(robot.position, p.position) for p in packages_on_board]
+            dist_to_target = min(distances)
 
-    # Unable to deliver/pick up a package, and not worth charging:
-    return 100 * robot.credit
+    # Calculate exact heuristic value according to the dry report formula: w1=2, w2=2, w3=1
+    h = (2 * credit_diff) + (2 * battery) - (1 * dist_to_target)
+
+    return h
 
 
 class AgentGreedyImproved(AgentGreedy):
@@ -170,8 +39,7 @@ class AgentGreedyImproved(AgentGreedy):
 
 
 class AgentMinimax(Agent):
-    def rb_minimax(self, env: WarehouseEnv, agent_id, depth, time_limit,
-                   current_robot):
+    def rb_minimax(self, env: WarehouseEnv, agent_id, depth, time_limit, current_robot):
         if time.time() > time_limit:
             return None, None
         if depth == 0 or env.done():
@@ -181,8 +49,7 @@ class AgentMinimax(Agent):
         if agent_id == current_robot:
             currMax = -math.inf
             for i, c in enumerate(children):
-                v, _ = self.rb_minimax(c, agent_id, depth - 1, time_limit,
-                                       1 - current_robot)
+                v, _ = self.rb_minimax(c, agent_id, depth - 1, time_limit, 1 - current_robot)
                 if v == None:
                     return None, None
                 if v > currMax:
@@ -191,8 +58,7 @@ class AgentMinimax(Agent):
             return currMax, moves_return
         currMin = math.inf
         for i, c in enumerate(children):
-            v, _ = self.rb_minimax(c, agent_id, depth - 1, time_limit,
-                                   1 - current_robot)
+            v, _ = self.rb_minimax(c, agent_id, depth - 1, time_limit, 1 - current_robot)
             if v == None:
                 return None, None
             if v < currMin:
@@ -218,8 +84,7 @@ class AgentMinimax(Agent):
 
 
 class AgentAlphaBeta(Agent):
-    def rb_alpha_beta(self, env: WarehouseEnv, agent_id, depth, time_limit,
-                      current_robot, alpha, beta):
+    def rb_alpha_beta(self, env: WarehouseEnv, agent_id, depth, time_limit, current_robot, alpha, beta):
         if time.time() > time_limit:
             return None, None
         if depth == 0 or env.done():
@@ -229,8 +94,7 @@ class AgentAlphaBeta(Agent):
         if agent_id == current_robot:
             currMax = -math.inf
             for i, c in enumerate(children):
-                v, _ = self.rb_alpha_beta(c, agent_id, depth - 1, time_limit,
-                                          1 - current_robot, alpha, beta)
+                v, _ = self.rb_alpha_beta(c, agent_id, depth - 1, time_limit, 1 - current_robot, alpha, beta)
                 if v == None:
                     return None, None
                 if v > currMax:
@@ -238,12 +102,11 @@ class AgentAlphaBeta(Agent):
                     moves_return = moves[i]
                 alpha = max(currMax, alpha)
                 if currMax >= beta:
-                    return math.inf, None
+                    return currMax, None  # Fixed pruning return
             return currMax, moves_return
         currMin = math.inf
         for i, c in enumerate(children):
-            v, _ = self.rb_alpha_beta(c, agent_id, depth - 1, time_limit,
-                                      1 - current_robot, alpha, beta)
+            v, _ = self.rb_alpha_beta(c, agent_id, depth - 1, time_limit, 1 - current_robot, alpha, beta)
             if v == None:
                 return None, None
             if v < currMin:
@@ -251,7 +114,7 @@ class AgentAlphaBeta(Agent):
                 moves_return = moves[i]
             beta = min(currMin, beta)
             if currMin <= alpha:
-                return -math.inf, None
+                return currMin, None  # Fixed pruning return
         return currMin, moves_return
 
     def run_step(self, env: WarehouseEnv, agent_id, time_limit):
@@ -262,8 +125,7 @@ class AgentAlphaBeta(Agent):
         while time.time() < limit and depth <= 4:
             if depth > 2 * env.get_robot(agent_id).battery:
                 return moves_return
-            h, moves = self.rb_alpha_beta(env, agent_id, depth, limit, agent_id,
-                                          -math.inf, math.inf)
+            h, moves = self.rb_alpha_beta(env, agent_id, depth, limit, agent_id, -math.inf, math.inf)
             depth += 1
             if h != None and moves != None:
                 moves_return = moves
@@ -273,43 +135,50 @@ class AgentAlphaBeta(Agent):
 
 
 class AgentExpectimax(Agent):
-    def expectimax(self, env: WarehouseEnv, agent_id, depth, time_limit,
-                   current_robot):
+    def expectimax(self, env: WarehouseEnv, agent_id, depth, time_limit, current_robot):
         if time.time() > time_limit:
             return None, None
         if depth == 0 or env.done():
             return smart_heuristic(env, current_robot), None
         moves, children = self.successors(env, current_robot)
         moves_return = None
+
+        # If it is our robot's turn (Max Node)
         if agent_id == current_robot:
             currMax = -math.inf
             for i, c in enumerate(children):
-                v, _ = self.expectimax(c, agent_id, depth - 1, time_limit,
-                                       1 - current_robot)
+                v, _ = self.expectimax(c, agent_id, depth - 1, time_limit, 1 - current_robot)
                 if v == None:
                     return None, None
                 if v > currMax:
                     currMax = v
                     moves_return = moves[i]
             return currMax, moves_return
-        # If it is the rival's turn:
-        currMin = math.inf
-        total = 0
-        numMoves = len(children)
+
+        # If it is the rival's turn (Chance Node)
+        expected_value = 0
+        total_weight = 0
+
+        # Calculate sum of weights for all legal moves
+        for m in moves:
+            if m in ['move north', 'charge']:
+                total_weight += 4
+            else:
+                total_weight += 1
+
         for i, c in enumerate(children):
-            v, _ = self.expectimax(c, agent_id, depth - 1, time_limit,
-                                   1 - current_robot)
+            v, _ = self.expectimax(c, agent_id, depth - 1, time_limit, 1 - current_robot)
             if v == None:
                 return None, None
-            if v < currMin:
-                currMin = v
-            if moves[i] == 'charge':
-                v = v * 2
-            total += v
-            average = total / numMoves
-        return average, moves[0]
 
-    # TODO: section d : 1
+            # Normalize to get probability
+            weight = 4 if moves[i] in ['move north', 'charge'] else 1
+            probability = weight / total_weight
+
+            expected_value += (probability * v)
+
+        return expected_value, moves[0]
+
     def run_step(self, env: WarehouseEnv, agent_id, time_limit):
         limit = time.time() + time_limit - 0.01
         moves, _ = self.successors(env, agent_id)
@@ -332,11 +201,9 @@ class AgentHardCoded(Agent):
     def __init__(self):
         self.step = 0
         # specifiy the path you want to check - if a move is illegal - the agent will choose a random move
-        self.trajectory = ["move south", "move west", "move north", "move east",
-                           "move north", "move north", "pick_up", "move east",
-                           "move east",
-                           "move south", "move south", "move south",
-                           "move south", "drop_off"]
+        self.trajectory = ["move south", "move west", "move north", "move east", "move north", "move north", "pick_up",
+                           "move east", "move east",
+                           "move south", "move south", "move south", "move south", "drop_off"]
 
     def run_step(self, env: WarehouseEnv, robot_id, time_limit):
         if self.step == len(self.trajectory):
